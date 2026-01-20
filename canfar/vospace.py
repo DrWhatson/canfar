@@ -18,9 +18,6 @@ log = get_logger(__name__)
 # Default VOSpace webservice host for CANFAR CLI
 DEFAULT_VOSPACE_HOST = "spsrc27.iaa.csic.es"
 
-# Header used by vos library for delegation token auth
-HEADER_DELEG_TOKEN = "X-CADC-DelegationToken"
-
 
 class VOSpaceClient(HTTPClient):
     """VOSpace client that inherits authentication from HTTPClient.
@@ -33,8 +30,8 @@ class VOSpaceClient(HTTPClient):
 
     Note:
         This client uses standard OAuth2 Bearer token authentication
-        (Authorization: Bearer header) instead of the X-CADC-DelegationToken
-        header for broader compatibility with VOSpace services.
+        (Authorization: Bearer header) for broad compatibility with VOSpace
+        services.
 
     Examples:
         >>> from canfar.vospace import VOSpaceClient
@@ -71,56 +68,39 @@ class VOSpaceClient(HTTPClient):
                 # Fallback for X509 or other auth modes
                 self._token = None
 
-            # Create the vos.Client with token
-            self._vos_client = vos.Client(vospace_token=self._token)
+            # Create vos.Client WITHOUT token to avoid X-CADC-DelegationToken header
+            # We'll set Bearer auth on each endpoint's session instead
+            self._vos_client = vos.Client()
 
-            # Patch to use Bearer auth for broader compatibility
-            # Some VOSpace servers (e.g., canfar.srcnet.skao.int) only accept
-            # Authorization: Bearer, while others (e.g., sweSRC) accept both
+            # Wrap get_endpoints to add Bearer auth to sessions
             if self._token:
-                self._patch_bearer_auth()
+                self._wrap_get_endpoints()
 
         return self._vos_client
 
-    def _patch_bearer_auth(self) -> None:
-        """Patch the vos.Client to use Bearer token authentication.
+    def _wrap_get_endpoints(self) -> None:
+        """Wrap get_endpoints to add Bearer auth to endpoint sessions.
 
-        This monkey-patches the get_endpoints method to add Bearer auth
-        headers to sessions as endpoints are created.
+        Uses the native session.token property from cadcutils.net.ws.RetrySession
+        to set Authorization: Bearer header.
         """
         token = self._token
         original_get_endpoints = self._vos_client.get_endpoints
 
-        def patched_get_endpoints(uri):
-            """Wrapper that adds Bearer auth after endpoint creation."""
+        def wrapped_get_endpoints(uri):
+            """Wrapper that sets Bearer auth on endpoint session."""
             endpoint = original_get_endpoints(uri)
 
-            # Modify the session headers for this endpoint
+            # Set Bearer auth using the native session.token property
             try:
-                ws_client = endpoint.conn.ws_client
-
-                # Clear X-CADC-DelegationToken from session_headers
-                # (this prevents it from being re-added on each session access)
-                if ws_client.session_headers and HEADER_DELEG_TOKEN in ws_client.session_headers:
-                    del ws_client.session_headers[HEADER_DELEG_TOKEN]
-
-                # Get the session and modify its headers
-                session = ws_client._get_session()
-
-                # Remove X-CADC-DelegationToken if present
-                if HEADER_DELEG_TOKEN in session.headers:
-                    del session.headers[HEADER_DELEG_TOKEN]
-
-                # Add Bearer auth if not already present
+                session = endpoint.conn.ws_client._get_session()
                 if "Authorization" not in session.headers:
-                    session.headers["Authorization"] = f"Bearer {token}"
-                    log.debug(f"Added Bearer auth for {uri}")
-
+                    session.token = token
+                    log.debug(f"Set Bearer auth for {uri}")
             except AttributeError as e:
-                log.warning(f"Could not modify auth headers for {uri}: {e}")
+                log.warning(f"Could not set auth for {uri}: {e}")
 
             return endpoint
 
-        # Replace the method
-        self._vos_client.get_endpoints = patched_get_endpoints
-        log.debug("Patched vos.Client to use Bearer authentication")
+        self._vos_client.get_endpoints = wrapped_get_endpoints
+        log.debug("Configured vos.Client to use Bearer authentication")
