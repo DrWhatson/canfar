@@ -79,26 +79,40 @@ class VOSpaceClient(HTTPClient):
         return self._vos_client
 
     def _wrap_get_endpoints(self) -> None:
-        """Wrap get_endpoints to add Bearer auth to endpoint sessions.
+        """Wrap get_endpoints to configure Bearer-only auth on endpoints.
 
-        Uses the native session.token property from cadcutils.net.ws.RetrySession
-        to set Authorization: Bearer header.
+        The vos library uses the Subject to determine available security methods
+        for capability lookups. We need to:
+        1. Set subject.token - so capability lookups can find authenticated URLs
+        2. Set session.token - to add Authorization: Bearer header
+
+        We do NOT use endpoint.set_auth() because it adds an X-CADC-DelegationToken
+        header which some VOSpace servers (e.g., Italian) don't support.
+        By setting tokens directly, we get Bearer-only auth that works across
+        different VOSpace implementations.
         """
         token = self._token
         original_get_endpoints = self._vos_client.get_endpoints
+        # Track which endpoints have been authenticated
+        authenticated_endpoints: set = set()
 
         def wrapped_get_endpoints(uri):
-            """Wrapper that sets Bearer auth on endpoint session."""
+            """Wrapper that configures Bearer-only auth on endpoints."""
             endpoint = original_get_endpoints(uri)
 
-            # Set Bearer auth using the native session.token property
-            try:
-                session = endpoint.conn.ws_client._get_session()
-                if "Authorization" not in session.headers:
+            if endpoint.resource_id not in authenticated_endpoints:
+                try:
+                    # Set token on subject for capability URL lookups
+                    endpoint.conn.subject.token = token
+
+                    # Set token on session for Bearer auth header
+                    session = endpoint.conn.ws_client._get_session()
                     session.token = token
-                    log.debug(f"Set Bearer auth for {uri}")
-            except AttributeError as e:
-                log.warning(f"Could not set auth for {uri}: {e}")
+
+                    authenticated_endpoints.add(endpoint.resource_id)
+                    log.debug(f"Configured Bearer auth for endpoint {endpoint.resource_id}")
+                except AttributeError as e:
+                    log.warning(f"Could not set auth for {uri}: {e}")
 
             return endpoint
 
