@@ -19,11 +19,11 @@ log = get_logger(__name__)
 DEFAULT_VOSPACE_HOST = "spsrc27.iaa.csic.es"
 
 
-class VOSpaceClient(HTTPClient):
-    """VOSpace client that inherits authentication from HTTPClient.
+class StorageClient(HTTPClient):
+    """Storage client that inherits authentication from HTTPClient.
 
     This client automatically uses the active CANFAR authentication context
-    to create an authenticated vos.Client instance.
+    to create an authenticated vos.Client instance for Cavern storage.
 
     The default VOSpace host is spsrc27.iaa.csic.es. This can be overridden
     by setting the VOSPACE_WEBSERVICE environment variable.
@@ -34,20 +34,20 @@ class VOSpaceClient(HTTPClient):
         services.
 
     Examples:
-        >>> from canfar.vospace import VOSpaceClient
-        >>> vospace = VOSpaceClient()
-        >>> vospace.vos_client.listdir("vos:")
+        >>> from canfar.vospace import StorageClient
+        >>> storage = StorageClient()
+        >>> storage.storage_client.listdir("vos:")
     """
 
     def __init__(self, **kwargs):
-        """Initialize VOSpaceClient with HTTPClient authentication."""
+        """Initialize StorageClient with HTTPClient authentication."""
         super().__init__(**kwargs)
         self._vos_client = None
         self._token = None
 
     @property
-    def vos_client(self) -> vos.Client:
-        """Get or create authenticated vos.Client instance.
+    def storage_client(self) -> vos.Client:
+        """Get or create authenticated vos.Client instance for Cavern storage.
 
         Returns:
             vos.Client: Authenticated VOSpace client using the active context's token.

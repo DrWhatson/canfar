@@ -1,4 +1,4 @@
-"""VOSpace file management commands for CANFAR CLI."""
+"""Cavern storage file management commands for CANFAR CLI."""
 
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ from vos.vos import CADC_GMS_PREFIX, SortNodeProperty, convert_vospace_time_to_s
 from canfar import get_logger, set_log_level
 from canfar.hooks.typer.aliases import AliasGroup
 from canfar.utils.console import console
-from canfar.vospace import VOSpaceClient
+from canfar.vospace import StorageClient
 
 log = get_logger(__name__)
 
 
-vos_cli = typer.Typer(
-    name="vos",
-    help="Manage files in VOSpace",
+storage_cli = typer.Typer(
+    name="storage",
+    help="Manage files in Cavern storage",
     no_args_is_help=True,
     rich_help_panel="File Management",
     cls=AliasGroup,
@@ -135,11 +135,11 @@ def _display_target(columns, row):
     sys.stdout.write(f"{name_string}\n")
 
 
-@vos_cli.command("ls")
+@storage_cli.command("ls")
 def list_files(
     uri: Annotated[
         str,
-        typer.Argument(help="VOSpace path to list (e.g., vos:, vos:/dir)"),
+        typer.Argument(help="Cavern path to list (e.g., vos:, vos:/dir)"),
     ],
     long: Annotated[
         bool,
@@ -163,21 +163,21 @@ def list_files(
     ] = False,
     time_sort: Annotated[
         bool,
-        typer.Option("--time", "-t", help="Sort by time copied to VOSpace"),
+        typer.Option("--time", "-t", help="Sort by time copied to Cavern"),
     ] = False,
     debug: Annotated[
         bool,
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """List VOSpace directory contents.
+    """List Cavern directory contents.
 
-    Lists information about a VOSpace DataNode or the contents of a ContainerNode.
+    Lists information about a Cavern DataNode or the contents of a ContainerNode.
 
     Examples:
-        canfar vos ls vos:
-        canfar vos ls -l vos:/data/
-        canfar vos ls -lh vos:/data/*.fits
+        canfar storage ls vos:
+        canfar storage ls -l vos:/data/
+        canfar storage ls -lh vos:/data/*.fits
     """
     if debug:
         set_log_level("DEBUG")
@@ -186,8 +186,8 @@ def list_files(
     _human_readable = human
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         # Set which columns will be printed
         columns = []
@@ -216,7 +216,7 @@ def list_files(
             order = 'desc' if sort else 'asc'
 
         if not client.is_remote_file(file_name=uri):
-            console.print(f"[bold red]Error: Invalid VOSpace node name: {uri}[/bold red]")
+            console.print(f"[bold red]Error: Invalid Cavern node name: {uri}[/bold red]")
             raise typer.Exit(1)
 
         log.debug(f"Getting listing of: {uri}")
@@ -253,7 +253,7 @@ def list_files(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("cp")
+@storage_cli.command("cp")
 def copy_files(
     source: Annotated[
         list[str],
@@ -285,21 +285,21 @@ def copy_files(
     ] = False,
     head: Annotated[
         bool,
-        typer.Option("--head", help="Copy only the headers of a file from VOSpace"),
+        typer.Option("--head", help="Copy only the headers of a file from Cavern"),
     ] = False,
     debug: Annotated[
         bool,
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Copy files to and from VOSpace.
+    """Copy files to and from Cavern storage.
 
     Copy is always recursive. Supports wildcards and cutouts.
 
     Examples:
-        canfar vos cp myfile.txt vos:/data/
-        canfar vos cp vos:/data/*.fits ./local_dir/
-        canfar vos cp -i local_dir/ vos:/backup/
+        canfar storage cp myfile.txt vos:/data/
+        canfar storage cp vos:/data/*.fits ./local_dir/
+        canfar storage cp -i local_dir/ vos:/backup/
     """
     if debug:
         set_log_level("DEBUG")
@@ -312,8 +312,8 @@ def copy_files(
     this_destination = dest
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         if not client.is_remote_file(dest):
             dest = os.path.abspath(dest)
@@ -476,7 +476,7 @@ def copy_files(
         # Main copy loop
         for source_pattern in source:
             if head and not client.is_remote_file(source_pattern):
-                log.error("--head only works for source files in VOSpace")
+                log.error("--head only works for source files in Cavern")
                 continue
 
             # Handle cutouts
@@ -510,9 +510,9 @@ def copy_files(
                     log.info(f"{source_arg}: Skipping (symbolic link)")
                     continue
 
-                # VOSpace to VOSpace copy not yet implemented
+                # Cavern to Cavern copy not yet implemented
                 if client.is_remote_file(source_arg) and client.is_remote_file(dest):
-                    raise Exception("Cannot (yet) copy from VOSpace to VOSpace")
+                    raise Exception("Cannot (yet) copy from Cavern to Cavern")
 
                 this_destination = dest
                 if isdir(source_arg):
@@ -559,11 +559,11 @@ def copy_files(
         raise typer.Exit(Nonlocal.exit_code)
 
 
-@vos_cli.command("rm")
+@storage_cli.command("rm")
 def remove_files(
     node: Annotated[
         list[str],
-        typer.Argument(help="VOSpace file(s) or directory to delete"),
+        typer.Argument(help="Cavern file(s) or directory to delete"),
     ],
     recursive: Annotated[
         bool,
@@ -574,26 +574,26 @@ def remove_files(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Remove VOSpace files or directories.
+    """Remove Cavern files or directories.
 
     Fails if trying to delete a non-empty container without --recursive flag,
     or if the node is locked.
 
     Examples:
-        canfar vos rm vos:/data/file.txt
-        canfar vos rm -R vos:/data/old_dir/
+        canfar storage rm vos:/data/file.txt
+        canfar storage rm -R vos:/data/old_dir/
     """
     if debug:
         set_log_level("DEBUG")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         for node_path in node:
             if not client.is_remote_file(node_path):
                 console.print(
-                    f"[bold red]Error: {node_path} is not a valid VOSpace handle[/bold red]")
+                    f"[bold red]Error: {node_path} is not a valid Cavern handle[/bold red]")
                 raise typer.Exit(1)
 
             if recursive:
@@ -629,11 +629,11 @@ def remove_files(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("mkdir")
+@storage_cli.command("mkdir")
 def make_directory(
     container_node: Annotated[
         str,
-        typer.Argument(help="VOSpace directory path to create"),
+        typer.Argument(help="Cavern directory path to create"),
     ],
     parents: Annotated[
         bool,
@@ -644,11 +644,11 @@ def make_directory(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Create a new VOSpace directory (ContainerNode).
+    """Create a new Cavern directory (ContainerNode).
 
     Examples:
-        canfar vos mkdir vos:/data/new_dir
-        canfar vos mkdir -p vos:/data/path/to/new_dir
+        canfar storage mkdir vos:/data/new_dir
+        canfar storage mkdir -p vos:/data/path/to/new_dir
     """
     if debug:
         set_log_level("DEBUG")
@@ -656,8 +656,8 @@ def make_directory(
     log.info(f"Creating ContainerNode (directory) {container_node}")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         this_dir = container_node
 
@@ -679,36 +679,36 @@ def make_directory(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("mv")
+@storage_cli.command("mv")
 def move_node(
     source: Annotated[
         str,
-        typer.Argument(help="VOSpace node to move"),
+        typer.Argument(help="Cavern node to move"),
     ],
     destination: Annotated[
         str,
-        typer.Argument(help="VOSpace destination path"),
+        typer.Argument(help="Cavern destination path"),
     ],
     debug: Annotated[
         bool,
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Move or rename a VOSpace node.
+    """Move or rename a Cavern node.
 
     If destination is a container, move source into it.
     Otherwise, rename source to destination.
 
     Examples:
-        canfar vos mv vos:/data/old.txt vos:/data/new.txt
-        canfar vos mv vos:/data/file.txt vos:/archive/
+        canfar storage mv vos:/data/old.txt vos:/data/new.txt
+        canfar storage mv vos:/data/file.txt vos:/archive/
     """
     if debug:
         set_log_level("DEBUG")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         if not client.is_remote_file(source):
             console.print(f"[bold red]Error: Source {source} is not a remote node[/bold red]")
@@ -732,11 +732,11 @@ def move_node(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("cat")
+@storage_cli.command("cat")
 def cat_file(
     uri: Annotated[
         str,
-        typer.Argument(help="VOSpace file to display"),
+        typer.Argument(help="Cavern file to display"),
     ],
     head: Annotated[
         bool,
@@ -747,23 +747,23 @@ def cat_file(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Display contents of a VOSpace file.
+    """Display contents of a Cavern file.
 
     Streams the file content to stdout.
 
     Examples:
-        canfar vos cat vos:/data/file.txt
-        canfar vos cat --head vos:/data/image.fits
+        canfar storage cat vos:/data/file.txt
+        canfar storage cat --head vos:/data/image.fits
     """
     if debug:
         set_log_level("DEBUG")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         if not client.is_remote_file(uri):
-            console.print(f"[bold red]Error: {uri} is not a valid VOSpace file[/bold red]")
+            console.print(f"[bold red]Error: {uri} is not a valid Cavern file[/bold red]")
             raise typer.Exit(1)
 
         view = 'header' if head else 'data'
@@ -778,7 +778,7 @@ def cat_file(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("ln")
+@storage_cli.command("ln")
 def link_node(
     source: Annotated[
         str,
@@ -786,33 +786,33 @@ def link_node(
     ],
     target: Annotated[
         str,
-        typer.Argument(help="Target VOSpace LinkNode to create"),
+        typer.Argument(help="Target Cavern LinkNode to create"),
     ],
     debug: Annotated[
         bool,
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Create a symbolic link in VOSpace.
+    """Create a symbolic link in Cavern storage.
 
     Creates a LinkNode that points to another location. The source can be
-    a VOSpace node, an external URL, or a local file.
+    a Cavern node, an external URL, or a local file.
 
     Examples:
-        canfar vos ln vos:/data/original.txt vos:/data/link.txt
-        canfar vos ln https://example.com/data.fits vos:/data/external_link
-        canfar vos ln file:///local/file.txt vos:/data/local_link
+        canfar storage ln vos:/data/original.txt vos:/data/link.txt
+        canfar storage ln https://example.com/data.fits vos:/data/external_link
+        canfar storage ln file:///local/file.txt vos:/data/local_link
     """
     if debug:
         set_log_level("DEBUG")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         if not client.is_remote_file(target):
             console.print(
-                f"[bold red]Error: Target {target} must be a VOSpace node[/bold red]")
+                f"[bold red]Error: Target {target} must be a Cavern node[/bold red]")
             raise typer.Exit(1)
 
         client.link(source, target)
@@ -823,11 +823,11 @@ def link_node(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("lock")
+@storage_cli.command("lock")
 def lock_node(
     node: Annotated[
         str,
-        typer.Argument(help="VOSpace node to lock/unlock/check"),
+        typer.Argument(help="Cavern node to lock/unlock/check"),
     ],
     lock: Annotated[
         bool,
@@ -842,15 +842,15 @@ def lock_node(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Lock, unlock, or check lock status of a VOSpace node.
+    """Lock, unlock, or check lock status of a Cavern node.
 
     A locked node cannot be copied to, moved, or deleted.
     Without --lock or --unlock, displays the current lock status.
 
     Examples:
-        canfar vos lock vos:/data/important.txt --lock
-        canfar vos lock vos:/data/important.txt --unlock
-        canfar vos lock vos:/data/important.txt
+        canfar storage lock vos:/data/important.txt --lock
+        canfar storage lock vos:/data/important.txt --unlock
+        canfar storage lock vos:/data/important.txt
     """
     if debug:
         set_log_level("DEBUG")
@@ -860,8 +860,8 @@ def lock_node(
         raise typer.Exit(1)
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         node_obj = client.get_node(node)
 
@@ -883,7 +883,7 @@ def lock_node(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("chmod")
+@storage_cli.command("chmod")
 def change_mode(
     mode: Annotated[
         str,
@@ -894,7 +894,7 @@ def change_mode(
     ],
     node: Annotated[
         str,
-        typer.Argument(help="VOSpace node to modify"),
+        typer.Argument(help="Cavern node to modify"),
     ],
     groups: Annotated[
         list[str],
@@ -909,7 +909,7 @@ def change_mode(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Change read/write permissions on VOSpace nodes.
+    """Change read/write permissions on Cavern nodes.
 
     Permission modes:
     - o+r / o-r : Make public / Make private
@@ -920,10 +920,10 @@ def change_mode(
     When adding group permissions, specify group names as additional arguments.
 
     Examples:
-        canfar vos chmod o+r vos:/data/file.txt
-        canfar vos chmod g+r vos:/data/file.txt Group1 Group2
-        canfar vos chmod g-rw vos:/data/file.txt
-        canfar vos chmod o+r vos:/data/ -R
+        canfar storage chmod o+r vos:/data/file.txt
+        canfar storage chmod g+r vos:/data/file.txt Group1 Group2
+        canfar storage chmod g-rw vos:/data/file.txt
+        canfar storage chmod o+r vos:/data/ -R
     """
     if debug:
         set_log_level("DEBUG")
@@ -943,8 +943,8 @@ def change_mode(
     what = mode_dict['what']
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         props = {}
 
@@ -1003,11 +1003,11 @@ def change_mode(
         raise typer.Exit(1) from ex
 
 
-@vos_cli.command("tag")
+@storage_cli.command("tag")
 def manage_tags(
     node: Annotated[
         str,
-        typer.Argument(help="VOSpace node to manage properties on"),
+        typer.Argument(help="Cavern node to manage properties on"),
     ],
     properties: Annotated[
         list[str],
@@ -1026,7 +1026,7 @@ def manage_tags(
         typer.Option("--debug", help="Enable debug logging"),
     ] = False,
 ) -> None:
-    """Manage properties (tags/attributes) on VOSpace nodes.
+    """Manage properties (tags/attributes) on Cavern nodes.
 
     Properties are key-value pairs stored as node metadata.
     Only user-defined properties can be set or removed.
@@ -1038,19 +1038,19 @@ def manage_tags(
     - List all: no property argument
 
     Examples:
-        canfar vos tag vos:/data/file.fits quality=good
-        canfar vos tag vos:/data/file.fits quality
-        canfar vos tag vos:/data/file.fits quality=
-        canfar vos tag vos:/data/file.fits quality --remove
-        canfar vos tag vos:/data/file.fits
-        canfar vos tag vos:/data/ quality=verified -R
+        canfar storage tag vos:/data/file.fits quality=good
+        canfar storage tag vos:/data/file.fits quality
+        canfar storage tag vos:/data/file.fits quality=
+        canfar storage tag vos:/data/file.fits quality --remove
+        canfar storage tag vos:/data/file.fits
+        canfar storage tag vos:/data/ quality=verified -R
     """
     if debug:
         set_log_level("DEBUG")
 
     try:
-        client_obj = VOSpaceClient()
-        client = client_obj.vos_client
+        client_obj = StorageClient()
+        client = client_obj.storage_client
 
         node_obj = client.get_node(node, limit=None, force=True)
 
